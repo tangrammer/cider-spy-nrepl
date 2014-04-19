@@ -9,13 +9,21 @@
 (defn- safe-inc [v]
   (if v (inc v) 1))
 
+(defn- extract-file
+  "Get the file for the given ns symbol. Ripped from CIDER."
+  [ns]
+  (when (find-ns ns)
+    (:file (meta (second (first (ns-publics ns)))))))
+
 (defn- add-to-ns-trail
   "The user namespace is ignored. If the same ns is given as currently
    at the head, it is also ignored."
   [tracking ns]
   (if (and ns (not= "user" ns)
            (not= ns (-> tracking :ns-trail first :ns)))
-    (update-in tracking [:ns-trail] conj {:dt (LocalDateTime.) :ns ns})
+    (update-in tracking [:ns-trail] conj
+               {:dt (LocalDateTime.) :ns ns
+                :file (extract-file (symbol ns))})
     tracking))
 
 ;; TODO need a decent way of recording where people are "at", a smart trail
@@ -50,7 +58,8 @@
                    (second (clojure.tools.namespace.parse/read-ns-decl
                             (PushbackReader. (java.io.StringReader. file)))))]
     (-> tracking
-        (update-in [:nses-loaded (str ns)] safe-inc)
+        (update-in [:nses-loaded (str ns) :freq] safe-inc)
+        (assoc-in [:nses-loaded (str ns) :file] (extract-file ns))
         (add-to-ns-trail (str ns)))
     tracking))
 

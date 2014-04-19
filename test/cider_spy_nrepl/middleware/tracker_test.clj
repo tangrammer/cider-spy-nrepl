@@ -29,14 +29,39 @@
      (track-msg! {:code code :ns "user"} session)
      (is (= 2 (get-in @session [:tracking :commands "clojure.core/println"]))))))
 
-(deftest test-track-ns-loaded
+;; Bit unsure of exactly when ns will be around.
+(deftest test-track-ns-loaded-no-ns
   (tracker-harness
    (let [file "(ns foo.bar) (println \"hi\")"]
      (track-msg! {:op "load-file" :file file} session)
-     (is (= 1 (get-in @session [:tracking :nses-loaded "foo.bar"])))
+     (is (= 1 (get-in @session [:tracking :nses-loaded "foo.bar" :freq])))
      (is (= (list "foo.bar") (map :ns (-> @session :tracking :ns-trail))))
      (track-msg! {:op "load-file" :file file} session)
-     (is (= 2 (get-in @session [:tracking :nses-loaded "foo.bar"]))))))
+     (is (= 2 (get-in @session [:tracking :nses-loaded "foo.bar" :freq]))))))
+
+;; test using clojure.core, I think this is a resource, not a file.
+;; Should challenge the model.
+;; Make this sucker work jp
+;; TODO - do I need the frigging file on disk? Delete, bounce REPL and retest
+;; TODO - test the ns-trail - this should have same shit going down
+;; A pretty bad problem is that this tracker needs to be applied POST handling...
+;; Probably a generic issue tbh
+(deftest test-track-ns-loaded
+  (require '[cider-spy-nrepl.middleware.sample-ns])
+  ((resolve 'cider-spy-nrepl.middleware.sample-ns/foo))
+  (tracker-harness
+   (testing "Some is reloading the sample-ns, to make changes etc."
+     (let [ns-str "cider-spy-nrepl.middleware.sample-ns"
+           file (format "(ns %s) (defn bob []) (println \"hi\")" ns-str)]
+       (track-msg! {:op "load-file" :file file} session)
+       (is (= 1 (get-in @session [:tracking :nses-loaded ns-str :freq])))
+       (println (get-in @session [:tracking :nses-loaded ns-str]))
+       (let [file-location (get-in @session [:tracking :nses-loaded ns-str :file])]
+         (is (and file-location
+                  (re-find #"cider_spy_nrepl/middleware/sample_ns\.clj$" file-location)))
+         ;; (is (and file-location
+         ;;          (re-find #"/test/cider_spy_nrepl/middleware/sample_ns\.clj$" file-location))))
+)))))
 
 (deftest test-track-namespace-and-loaded
   (tracker-harness
